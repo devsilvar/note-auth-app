@@ -36,6 +36,26 @@ app.use(cors({
      }
 }))
 app.use(express.urlencoded({extended:true , limit:'20kb'}))
+// ── HEALTH CHECK ───────────────────────────────────────────────────
+app.get('/health', async (req, res) => {
+  const dbStatus = mongoose.connection.readyState === 1
+    ? 'connected'
+    : 'disconnected';
+
+  const health = {
+    status:      dbStatus === 'connected' ? 'healthy' : 'unhealthy',
+    timestamp:   new Date().toISOString(),
+    uptime:      `${Math.floor(process.uptime())} seconds`,
+    environment: process.env.NODE_ENV,
+    database:    dbStatus,
+    memory: {
+      used:  `${Math.round(process.memoryUsage().heapUsed  / 1024 / 1024)} MB`,
+      total: `${Math.round(process.memoryUsage().heapTotal / 1024 / 1024)} MB`
+    }
+  };
+
+  res.status(health.status === 'healthy' ? 200 : 503).json(health);
+});
 
 app.use("/auth" , userRoutes)
 app.use("/notes" , notesRoutes)
