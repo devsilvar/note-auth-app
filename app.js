@@ -37,6 +37,14 @@ app.use("/auth", userRoutes);
 app.use("/notes", notesRoutes);
 
 
+app.get("/health" , (req, res)=>{
+    res.status(200).json({
+        status: "ok",
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+    })
+
+})
 
 // 404 handler for undefined routes
 app.use((req, res, next) => {
