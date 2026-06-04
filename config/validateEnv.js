@@ -1,21 +1,22 @@
-const validateEnv = ()=>{
-    const required= [
+// Validate required environment variables on startup
+const validateEnv = () => {
+    const required = [
         'NODE_ENV',
         'MONGO_URI',
         'JWT_SECRET',
         'JWT_EXPIRES_IN',
         'FRONTEND_URL'
-    ]
-    for (const key of required) {
-        if (!process.env[key]) {
-            throw new Error(`Environment variable not set: ${key}`);
-            process.exit(1)
-        }
-    }
-    if(process.env.JWT_SECRET.length < 32){
-        console.error('JWT SECRET too short')
-        process.exit(1)
-    }
-}
+    ];
 
-module.exports = validateEnv
+    const missing = required.filter(key => !process.env[key]);
+
+    if (missing.length > 0) {
+        throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+    }
+
+    if (process.env.JWT_SECRET.length < 32) {
+        throw new Error('JWT_SECRET must be at least 32 characters long');
+    }
+};
+
+module.exports = validateEnv;

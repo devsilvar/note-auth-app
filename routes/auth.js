@@ -1,103 +1,104 @@
-const express = require('express')
-const router = express.Router()
-const jwt = require("jsonwebtoken")
-const UserModel = require("../models/User")
-const createToken = require("../utils/createToken")
-const protect = require('../middleware/protect')
+const express = require('express');
+const { body } = require('express-validator');
+const router = express.Router();
+const rateLimit = require('express-rate-limit');
+const UserModel = require("../models/User");
+const createToken = require("../utils/createToken");
+const protect = require('../middleware/protect');
+const validate = require('../middleware/validate');
 
+// Rate limiting for authentication endpoints
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+    message: { error: 'Too many requests, please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
 
+router.use(authLimiter);
 
-//helper function to create a signed jwt for a user
-// each user need to have a signed jwt so they can use it as a token for request after they login etc
+// Validation rules for user registration
+const registerValidation = [
+    body('email')
+        .isEmail().withMessage('Valid email is required')
+        .normalizeEmail(),
+    body('password')
+        .isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+    body('firstName')
+        .trim()
+        .isLength({ min: 2 }).withMessage('First name must be at least 2 characters'),
+    body('lastName')
+        .trim()
+        .isLength({ min: 2 }).withMessage('Last name must be at least 2 characters'),
+];
 
+// Validation rules for login
+const loginValidation = [
+    body('email')
+        .isEmail().withMessage('Valid email is required')
+        .normalizeEmail(),
+    body('password')
+        .exists().withMessage('Password is required'),
+];
 
+// Register a new user
+router.post("/register", registerValidation, validate, async (req, res, next) => {
+    const { email, password, firstName, lastName } = req.body;
 
+    const existingUser = await UserModel.findOne({ email });
 
-router.post("/register" , async(req, res , next)=>{
-    try{
-        const {email, password , firstName , lastName} = req.body
-
-        if( !password || !email || !firstName || !lastName){
-            const error = new Error("all fields are required")
-            error.statusCode = 404;
-            return next(error)
-        }
-        const existingUser = await UserModel.findOne({email})
-
-        if(existingUser){
-            const error = new Error("User already exists")
-            error.statusCode = 409;
-            
-            res.status(409).json({error: error.message})
-        }
-
-         //create a new user with teh json in teh body coing from the request
-        const newUser = await UserModel.create({email, password, firstName, lastName})
-
-         
-        //create a token for the new user
-        const newUserToken = createToken(newUser._id)
-
-        //return the token along with teh data
-        res.status(200).json({
-            message:"User registered successfully",
-            newUserToken,
-            data:{id:newUser._id,  firstName:newUser.firstName , lastName:newUser.lastName , email:newUser.email}
-        })
-    }catch(err){
-         res.status(500).json({sucess:false, error: err.message})
-        next(err)
-    }
-})
-
-
-
-//login a user
-router.post("/login", async (req, res, next) => {
-    try{
-        const {email , password} = req.body
-
-        if(!email || !password){
-            const error =  new Error("Email and password are required")
-            error.statusCode = 404
-            return next(error)
-        }
-     
-        //find the user based on condition i.e teh email sicne itis unique
-        const user = await UserModel.findOne({email: req.body.email})
-
-        if(!user || !(await user.checkPassword(password))){
-             const error = new Error('Incorrect email or password');
-           error.statusCode = 401;
-            return next(error);
-        }
-
-         //create a signed token since the user is logging in 
-         const userToken = createToken(user._id)
-
-         res.status(200).json({
-            message:"sucessfully logged in",
-            userToken,
-            data:{id:user._id,  firstName:user.firstName , lastName:user.lastName , email:user.email}
-         })
-
-
-    }catch(err){
-      res.status(400).json({sucess:false, error: err.message})
+    if (existingUser) {
+        const error = new Error("User already exists");
+        error.statusCode = 409;
+        return next(error);
     }
 
-})
+    // Create a new user with the data from the request body
+    const newUser = await UserModel.create({ email, password, firstName, lastName });
+
+    // Generate a JWT token for the new user
+    const userToken = createToken(newUser._id);
+
+    res.status(201).json({
+        message: "User registered successfully",
+        token: userToken,
+        data: { id: newUser._id, firstName: newUser.firstName, lastName: newUser.lastName, email: newUser.email }
+    });
+});
 
 
+// Login a user
+router.post("/login", loginValidation, validate, async (req, res, next) => {
+    const { email, password } = req.body;
+
+    // Find the user by email (unique field)
+    const user = await UserModel.findOne({ email }).select('+password');
+
+    if (!user || !(await user.checkPassword(password))) {
+        const error = new Error('Incorrect email or password');
+        error.statusCode = 401;
+        return next(error);
+    }
+
+    // Generate a signed JWT token
+    const userToken = createToken(user._id);
+
+    res.status(200).json({
+        message: "Successfully logged in",
+        token: userToken,
+        data: { id: user._id, firstName: user.firstName, lastName: user.lastName, email: user.email }
+    });
+});
 
 
-router.get("/me" ,protect, async(req, res, next)=>{
+// Get current user profile (protected route)
+router.get("/me", protect, async (req, res, next) => {
+    res.status(200).json({
+        userId: req.user._id,
+        email: req.user.email,
+        name: req.user.firstName + " " + req.user.lastName
+    });
+});
 
-    return res.status(200).json({
-      userId: req.user._id,
-      email: req.user.email,
-      name : req.user.firstName + " " + req.user.lastName
-    })
-})
 module.exports = router;
-

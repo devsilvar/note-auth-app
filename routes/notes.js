@@ -1,159 +1,156 @@
-const express = require('express')
+const express = require('express');
+const { body, param, query } = require('express-validator');
 const router = express.Router();
-const NotesModel = require("../models/Note")
-const UserModel = require("../models/User")
-const protect = require("../middleware/protect")
+const rateLimit = require('express-rate-limit');
+const NotesModel = require("../models/Note");
+const protect = require("../middleware/protect");
+const validate = require('../middleware/validate');
 
+// Apply authentication middleware first, then rate limiting
+router.use(protect);
 
+// Rate limiting for notes endpoints
+const notesLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 200, // limit each IP to 200 requests per windowMs
+    message: { error: 'Too many requests, please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
 
+router.use(notesLimiter);
 
+// Validation rules for creating a note
+const createNoteValidation = [
+    body('title')
+        .trim()
+        .isLength({ min: 1, max: 200 }).withMessage('Title is required and must be under 200 characters'),
+    body('content')
+        .trim()
+        .isLength({ min: 1 }).withMessage('Content is required'),
+    body('status')
+        .optional()
+        .isBoolean().withMessage('Status must be a boolean'),
+];
 
-router.use(protect)
-router.get("/search", async (req, res, next) => {
-  try {
-    const filter = {
-      user: req.user._id,
-    };
+// Validation rules for updating a note
+const updateNoteValidation = [
+    body('title')
+        .optional()
+        .trim()
+        .isLength({ min: 1, max: 200 }).withMessage('Title must be under 200 characters'),
+    body('content')
+        .optional()
+        .trim()
+        .isLength({ min: 1 }).withMessage('Content cannot be empty'),
+    body('status')
+        .optional()
+        .isBoolean().withMessage('Status must be a boolean'),
+];
 
-    // search by title if provided
+// Validation for MongoDB ID
+const idValidation = [
+    param('id').isMongoId().withMessage('Invalid note ID format'),
+];
+
+// Search notes by title or content
+router.get("/search", [
+    query('title').optional().trim(),
+    query('content').optional().trim(),
+], validate, async (req, res, next) => {
+    const filter = { user: req.user._id };
+
     if (req.query.title) {
-      filter.title = new RegExp(req.query.title, "i");
+        filter.title = new RegExp(req.query.title, "i");
     }
-    if(req.query.content){
-        filter.content =  new RegExp(req.query.content, "i")
+    if (req.query.content) {
+        filter.content = new RegExp(req.query.content, "i");
     }
 
     const notes = await NotesModel.find(filter);
 
-    res.status(200).json({
-      count: notes.length,
-      data: notes,
-    });
-    
-  } catch (err) {
-    return next(err);
-  }
+    res.status(200).json({ count: notes.length, data: notes });
 });
 
 
-//crete note
-router.post("/"  , async(req, res, next) =>{
-    try{
-      const {title , content, status} = req.body
-      console.log(title , content , status)
+// Create a new note
+router.post("/", createNoteValidation, validate, async (req, res, next) => {
+    const { title, content, status } = req.body;
 
-      if(!title || !content ){
-        const error = new Error("Title , status and content are required")
-        error.statusCode = 400
-        return next(error)
-      }
-        const note = await NotesModel.create({title:title , content:content , status:status , user:req.user._id})
-        return res.status(201).json({message:"sucessfully created" ,data: note})
-    }catch(err){
-        console.log(err)
-        return next(err)
+    const note = await NotesModel.create({
+        title,
+        content,
+        status,
+        user: req.user._id
+    });
+
+    res.status(201).json({
+        message: "Note created successfully",
+        data: note
+    });
+});
+
+
+// Delete a note (only by the authenticated user)
+router.delete("/:id", idValidation, validate, async (req, res, next) => {
+    const deletedNote = await NotesModel.findOneAndDelete({
+        _id: req.params.id,
+        user: req.user._id
+    });
+
+    if (!deletedNote) {
+        const error = new Error('Note not found or not authorized to delete');
+        error.statusCode = 404;
+        return next(error);
     }
-})
+
+    res.status(200).json({ message: "Note deleted successfully" });
+});
 
 
-//delete a note  // but only the authticated user can delete
-router.delete("/:id"  , async(req, res , next)=>{
-    try{
-        const deletedNote = await NotesModel.findOneAndDelete({_id:req.params.id, user:req.user._id})
-       if(!deletedNote){
-           const error = new Error('Cannot find Note to Delete')
-           error.statusCode = 404
-           return next(error)
-       }
-       res.status(200).json({
-        message:"sucessfully deleted Note"
-       })
-    }catch(err){
-        res.status(400).json({
-            error:err.message
-        })
-    }
-})
-
-//get all notes of a user
+// Get all notes for the authenticated user
 router.get("/", async (req, res, next) => {
-    try{  
-        const notes = await NotesModel.find({ user: req.user._id })
-        if(notes.length == 0){
-            const error = new Error('No notes found for this user')
-            error.statusCode = 404
-            return next(error)
-        }
-        res.status(200).json({count: notes.length, data: notes })
-    }catch(err){
-        next(err)
+    const notes = await NotesModel.find({ user: req.user._id });
+
+    res.status(200).json({ count: notes.length, data: notes });
+});
+
+
+// Get a single note by ID
+router.get("/:id", idValidation, validate, async (req, res, next) => {
+    const note = await NotesModel.findOne({
+        _id: req.params.id,
+        user: req.user._id
+    });
+
+    if (!note) {
+        const error = new Error('Note not found');
+        error.statusCode = 404;
+        return next(error);
     }
-})
+
+    res.status(200).json({ data: note });
+});
 
 
+// Update a note (only by the authenticated user)
+router.put("/:id", idValidation, updateNoteValidation, validate, async (req, res, next) => {
+    const note = await NotesModel.findOneAndUpdate(
+        { _id: req.params.id, user: req.user._id },
+        req.body,
+        { new: true, runValidators: true }
+    );
 
-//get a single note for a user
-router.get("/:id", async (req, res, next) => {
-    try {
-        const note = await NotesModel.findOne({_id:req.params.id , user:req.user._id})
-        if (!note) {
-            const error = new Error('Note not found')
-            error.statusCode = 404
-            return next(error)
-        }
-        res.status(200).json({ data: note })
-    } catch (err) {
-        next(err)
+    if (!note) {
+        const error = new Error('Note not found or not authorized to update');
+        error.statusCode = 404;
+        return next(error);
     }
-})
 
+    res.status(200).json({
+        message: "Note updated successfully",
+        data: note
+    });
+});
 
-
-//edit a note from a user
-router.put("/:id", async(req, res, next)=>{
-    try{
-        const note = await NotesModel.findOneAndUpdate(
-            {_id:req.params.id , user:req.user._id},
-            req.body,
-            { new: true , runValidators:true }
-        )
-        if (!note) {
-            const error = new Error('Note not found')
-            error.statusCode = 404
-            return next(error)
-        }
-        res.status(200).json({ data: note })
-    }catch(err){
-        return next(err)
-    }})
-
-
-//searchthrough notes bsed on the user own title
-// router.get("/search", async(req, res,next)=>{
-//     try{
-//         const filter = {
-//             user:req.user._id
-//         }
-//         // if the user sends something like a titke in teh request body then inject the title inside filter
-
-//         // filter.title now equals a regex that check tehtitkle for any occurence of wht ////you type in teh title
-
-//         if(req.body.title) {
-//             filter.title = new RegExp(req.query.title, 'i') // case-insensitive search
-//         }
-        
-//         const notes = await NotesModel.findOne(filter)
-//         res.status(200).json({count: notes.length, data: notes })
-    
-//     }catch(err){
-//         return next(err)
-//     }
-// })
-
-
-
-module.exports = router
-
-
-
-
+module.exports = router;
