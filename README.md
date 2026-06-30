@@ -8,12 +8,32 @@ A RESTful API for user authentication and note-taking functionality.
 - **Note Management**: CRUD operations for notes
 - **Security**: Rate limiting, CORS, Helmet, input validation
 - **Production Ready**: Logging, error handling, graceful shutdown
+- **API Documentation**: Interactive Swagger UI documentation
 
 ## Installation
 
 ```bash
 npm install
 ```
+
+## API Documentation
+
+Once the server is running, access the interactive Swagger documentation at:
+
+**http://localhost:5000/api-docs**
+
+The Swagger UI provides:
+- Complete API endpoint documentation
+- Request/response schemas
+- Interactive "Try it out" functionality
+- Authentication testing with JWT tokens
+
+To test authenticated endpoints:
+1. Register or login via `/auth/register` or `/auth/login`
+2. Copy the JWT token from the response
+3. Click "Authorize" button at the top of Swagger UI
+4. Enter `Bearer <your-token>` and click "Authorize"
+5. Test protected endpoints
 
 ## Environment Variables
 

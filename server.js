@@ -56,7 +56,7 @@ const startServer = async () => {
             setTimeout(() => {
                 logger.error('Force shutdown after timeout');
                 process.exit(1);
-            }, 15000);
+            }, 10000);
         };
 
         process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
@@ -68,8 +68,8 @@ const startServer = async () => {
     }
 };
 
-startServer();
 
+startServer();
 
 
 

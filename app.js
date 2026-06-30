@@ -7,10 +7,13 @@ const morganMiddleware = require("./config/morgan");
 const errorHandler = require("./middleware/errorHandler");
 const logger = require("./config/logger");
 const corsOption = require("./config/cors")
+const swaggerUi = require('swagger-ui-express');
+const swaggerDocument = require('./swagger-output.json');
 
-const userRoutes = require("./routes/auth");
+
+
+const authRoutes = require("./routes/auth");
 const notesRoutes = require("./routes/notes");
-
 
 // Validate environment variables before starting
 validateEnv();
@@ -32,9 +35,12 @@ app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 // CORS configuration
 app.use(cors(corsOption));
 
+
 // API routes
-app.use("/auth", userRoutes);
+app.use("/auth", authRoutes);
 app.use("/notes", notesRoutes);
+app.use('/api-docs', swaggerUi.serve);
+app.get('/api-docs', swaggerUi.setup(swaggerDocument));
 
 
 app.get("/health" , (req, res)=>{

@@ -1,16 +1,14 @@
 const express = require('express');
-const { body } = require('express-validator');
+const Joi = require('joi');
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
 const UserModel = require("../models/User");
 const createToken = require("../utils/createToken");
 const protect = require('../middleware/protect');
-const validate = require('../middleware/validate');
 
-// Rate limiting for authentication endpoints
 const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // limit each IP to 100 requests per windowMs
+    windowMs: 15 * 60 * 1000,
+    max: 100,
     message: { error: 'Too many requests, please try again later.' },
     standardHeaders: true,
     legacyHeaders: false,
@@ -18,87 +16,105 @@ const authLimiter = rateLimit({
 
 router.use(authLimiter);
 
-// Validation rules for user registration
-const registerValidation = [
-    body('email')
-        .isEmail().withMessage('Valid email is required')
-        .normalizeEmail(),
-    body('password')
-        .isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
-    body('firstName')
-        .trim()
-        .isLength({ min: 2 }).withMessage('First name must be at least 2 characters'),
-    body('lastName')
-        .trim()
-        .isLength({ min: 2 }).withMessage('Last name must be at least 2 characters'),
-];
+const registerValidationSchema = Joi.object({
+    email: Joi.string().email().required().messages({
+        'string.email': 'Valid email is required',
+        'string.empty': 'Email is required'
+    }),
+    password: Joi.string().min(6).required().messages({
+        'string.min': 'Password must be at least 6 characters',
+        'string.empty': 'Password is required'
+    }),
+    firstName: Joi.string().min(2).trim().required().messages({
+        'string.min': 'First name must be at least 2 characters',
+        'string.empty': 'First name is required'
+    }),
+    lastName: Joi.string().min(2).trim().required().messages({
+        'string.min': 'Last name must be at least 2 characters',
+        'string.empty': 'Last name is required'
+    })
+});
 
-// Validation rules for login
-const loginValidation = [
-    body('email')
-        .isEmail().withMessage('Valid email is required')
-        .normalizeEmail(),
-    body('password')
-        .exists().withMessage('Password is required'),
-];
+const loginValidationSchema = Joi.object({
+    email: Joi.string().email().required().messages({
+        'string.email': 'Valid email is required',
+        'string.empty': 'Email is required'
+    }),
+    password: Joi.string().required().messages({
+        'string.empty': 'Password is required'
+    })
+});
 
-// Register a new user
-router.post("/register", registerValidation, validate, async (req, res, next) => {
+router.post("/register", async (req, res)=>{
     const { email, password, firstName, lastName } = req.body;
+    try{
+        const { error } = registerValidationSchema.validate({ email, password, firstName, lastName });
+        if(error){
+            return res.status(400).json({
+                message: error.details[0].message
+            });
+        }
 
-    const existingUser = await UserModel.findOne({ email });
+        const existingUser = await UserModel.findOne({ email });
 
-    if (existingUser) {
-        const error = new Error("User already exists");
-        error.statusCode = 409;
-        return next(error);
+        if (existingUser) {
+            return res.status(409).json({ message: "User already exists" });
+        }
+
+        const newUser = await UserModel.create({ email, password, firstName, lastName });
+
+        const userToken = createToken(newUser._id);
+
+        res.status(201).json({
+            message: "User registered successfully",
+            token: userToken,
+            data: { id: newUser._id, firstName: newUser.firstName, lastName: newUser.lastName, email: newUser.email }
+        });
+    }catch(err){
+        console.log(err);
     }
-
-    // Create a new user with the data from the request body
-    const newUser = await UserModel.create({ email, password, firstName, lastName });
-
-    // Generate a JWT token for the new user
-    const userToken = createToken(newUser._id);
-
-    res.status(201).json({
-        message: "User registered successfully",
-        token: userToken,
-        data: { id: newUser._id, firstName: newUser.firstName, lastName: newUser.lastName, email: newUser.email }
-    });
 });
 
-
-// Login a user
-router.post("/login", loginValidation, validate, async (req, res, next) => {
+router.post("/login", async (req, res)=>{
     const { email, password } = req.body;
+    try{
+        const { error } = loginValidationSchema.validate({ email, password });
+        if(error){
+            return res.status(400).json({
+                message: error.details[0].message
+            });
+        }
 
-    // Find the user by email (unique field)
-    const user = await UserModel.findOne({ email }).select('+password');
+        const user = await UserModel.findOne({ email }).select('+password');
 
-    if (!user || !(await user.checkPassword(password))) {
-        const error = new Error('Incorrect email or password');
-        error.statusCode = 401;
-        return next(error);
+        if (!user || !(await user.checkPassword(password))) {
+            return res.status(401).json({
+                message: 'Incorrect email or password'
+            });
+        }
+
+        const userToken = createToken(user._id);
+
+        res.status(200).json({
+            message: "Successfully logged in",
+            token: userToken,
+            data: { id: user._id, firstName: user.firstName, lastName: user.lastName, email: user.email }
+        });
+    }catch(err){
+        console.log(err);
     }
-
-    // Generate a signed JWT token
-    const userToken = createToken(user._id);
-
-    res.status(200).json({
-        message: "Successfully logged in",
-        token: userToken,
-        data: { id: user._id, firstName: user.firstName, lastName: user.lastName, email: user.email }
-    });
 });
 
-
-// Get current user profile (protected route)
-router.get("/me", protect, async (req, res, next) => {
-    res.status(200).json({
-        userId: req.user._id,
-        email: req.user.email,
-        name: req.user.firstName + " " + req.user.lastName
-    });
+router.get("/me", protect, async (req, res)=>{
+    try{
+        res.status(200).json({
+            userId: req.user._id,
+            email: req.user.email,
+            name: req.user.firstName + " " + req.user.lastName
+        });
+    }catch(err){
+        console.log(err);
+    }
 });
 
 module.exports = router;

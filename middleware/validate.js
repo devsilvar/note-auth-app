@@ -1,16 +1,9 @@
-const { validationResult } = require('express-validator');
+const Joi = require('joi');
 
-// Middleware to validate request using express-validator
-const validate = (req, res, next) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-        const errorMessages = errors.array().map(err => err.msg);
-        const error = new Error('Validation failed');
-        error.statusCode = 400;
-        error.errors = errorMessages;
-        return next(error);
-    }
-    next();
+const validateSchema = (schema, data) => {
+    return schema.validate(data, {
+        abortEarly: false
+    });
 };
 
-module.exports = validate;
+module.exports = validateSchema;
