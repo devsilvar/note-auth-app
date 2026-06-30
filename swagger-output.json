@@ -11,7 +11,27 @@
     "http"
   ],
   "paths": {
-    "/register": {
+    "/api-docs": {
+      "get": {
+        "description": "",
+        "responses": {
+          "default": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/auth/register": {
       "post": {
         "description": "",
         "parameters": [
@@ -50,7 +70,7 @@
         }
       }
     },
-    "/login": {
+    "/auth/login": {
       "post": {
         "description": "",
         "parameters": [
@@ -83,7 +103,7 @@
         }
       }
     },
-    "/me": {
+    "/auth/me": {
       "get": {
         "description": "",
         "parameters": [
@@ -103,7 +123,7 @@
         }
       }
     },
-    "/search": {
+    "/notes/search": {
       "get": {
         "description": "",
         "parameters": [
@@ -136,7 +156,7 @@
         }
       }
     },
-    "/": {
+    "/notes/": {
       "post": {
         "description": "",
         "parameters": [
@@ -195,7 +215,7 @@
         }
       }
     },
-    "/{id}": {
+    "/notes/{id}": {
       "delete": {
         "description": "",
         "parameters": [
