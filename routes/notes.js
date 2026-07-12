@@ -9,7 +9,7 @@ router.use(protect);
 
 const notesLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 500,
+    max: 5000,
     message: { error: 'Too many requests, please try again later.' },
     standardHeaders: true,
     legacyHeaders: false,
@@ -52,12 +52,12 @@ const updateNoteValidationSchema = Joi.object({
 }).or('title', 'content', 'status');
 
 router.get("/search", async (req, res)=>{
-    const { title, content } = req.query;
+    const { q } = req.query;  //single search term
+
     try{
         const { error } = Joi.object({
-            title: Joi.string().trim().optional(),
-            content: Joi.string().trim().optional()
-        }).validate({ title, content });
+            q: Joi.string().trim().optional()
+            }).validate({ q });
 
         if(error){
             return res.status(400).json({
@@ -67,11 +67,11 @@ router.get("/search", async (req, res)=>{
 
         const filter = { user: req.user._id };
 
-        if (title) {
-            filter.title = new RegExp(title, "i");
-        }
-        if (content) {
-            filter.content = new RegExp(content, "i");
+        if ( q ) {
+            filter.$or = [
+                {title: {$regex : q , $options: 'i' }},
+                {content: {$regex: q , $options: 'i'} }
+            ];
         }
 
         const notes = await NotesModel.find(filter);
@@ -135,7 +135,7 @@ router.delete("/:id", async (req, res)=>{
 
 router.get("/", async (req, res)=>{
     try{
-        const notes = await NotesModel.find({ user: req.user._id });
+        const notes = await NotesModel.find({ user: req.user._id }).sort({createdAt: -1});
         res.status(200).json({ count: notes.length, data: notes });
     }catch(err){
         console.log(err);
