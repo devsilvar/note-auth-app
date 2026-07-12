@@ -1,5 +1,6 @@
 const allowedOrigins = [
     "http://localhost:5173",
+    "https://notelynew.netlify.app",
      process.env.FRONTEND_URL,
 ].filter(Boolean)
 
