@@ -24,7 +24,7 @@ const corsOption = {
             return callback(new Error(`Origin ${origin} not allowed by CORS`));
         }    
     },
-//    credentials: true, // Allow cookies and authorization headers
+
     optionsSuccessStatus: 200, // Some legacy browsers choke on 204
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
